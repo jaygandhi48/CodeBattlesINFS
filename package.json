@@ -1,0 +1,38 @@
+{
+  "name": "code-battles-infs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Step-one Judge0 connectivity smoke test for Code Battles.",
+  "type": "module",
+  "scripts": {
+    "judge0:test": "node --env-file=.env src/judge0-smoke-test.js",
+    "check": "node --check src/judge0-smoke-test.js",
+    "db:format": "prisma format",
+    "db:validate": "prisma validate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio",
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=20.6"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.8",
+    "express": "^5.3.0",
+    "pg": "^8.23.1",
+    "redis": "^6.3.0",
+    "socket.io": "^4.8.4",
+    "socket.io-client": "^4.8.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14",
+    "prisma": "^7.10.1"
+  }
+}

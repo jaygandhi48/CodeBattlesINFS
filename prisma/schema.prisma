@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum BattleStatus {
+  WAITING
+  ACTIVE
+  FINISHED
+  CANCELLED
+}
+
+enum SubmissionStatus {
+  QUEUED
+  JUDGING
+  ACCEPTED
+  WRONG_ANSWER
+  RUNTIME_ERROR
+  COMPILATION_ERROR
+  TIME_LIMIT_EXCEEDED
+  INTERNAL_ERROR
+}
+
+model Player {
+  id           String   @id @default(uuid()) @db.Uuid
+  displayName  String   @db.VarChar(40)
+  sessionToken String   @unique @db.VarChar(128)
+  createdAt    DateTime @default(now())
+
+  battleMemberships BattlePlayer[]
+  hostedBattles     Battle[]       @relation("BattleHost")
+  wonBattles        Battle[]       @relation("BattleWinner")
+  submissions       Submission[]
+}
+
+model Problem {
+  id          String   @id @default(uuid()) @db.Uuid
+  title       String   @db.VarChar(150)
+  description String   @db.Text
+  starterCode String   @default("") @db.Text
+  timeLimitMs Int      @default(2000)
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  testCases TestCase[]
+  battles   Battle[]
+}
+
+model TestCase {
+  id             String  @id @default(uuid()) @db.Uuid
+  problemId      String  @db.Uuid
+  input          String  @db.Text
+  expectedOutput String  @db.Text
+  isHidden       Boolean @default(true)
+  position       Int
+
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@unique([problemId, position])
+  @@index([problemId])
+}
+
+model Battle {
+  id         String       @id @default(uuid()) @db.Uuid
+  roomCode   String       @unique @db.VarChar(8)
+  problemId  String       @db.Uuid
+  hostId     String       @db.Uuid
+  winnerId   String?      @db.Uuid
+  status     BattleStatus @default(WAITING)
+  version    Int          @default(0)
+  createdAt  DateTime     @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  problem     Problem        @relation(fields: [problemId], references: [id])
+  host        Player         @relation("BattleHost", fields: [hostId], references: [id])
+  winner      Player?        @relation("BattleWinner", fields: [winnerId], references: [id], onDelete: SetNull)
+  players     BattlePlayer[]
+  submissions Submission[]
+
+  @@index([problemId])
+  @@index([hostId])
+  @@index([winnerId])
+}
+
+model BattlePlayer {
+  battleId String   @db.Uuid
+  playerId String   @db.Uuid
+  seat     Int
+  joinedAt DateTime @default(now())
+
+  battle Battle @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@id([battleId, playerId])
+  @@unique([battleId, seat])
+  @@index([playerId])
+}
+
+model Submission {
+  id          String           @id @default(uuid()) @db.Uuid
+  battleId    String           @db.Uuid
+  playerId    String           @db.Uuid
+  sourceCode  String           @db.Text
+  status      SubmissionStatus @default(QUEUED)
+  testsPassed Int              @default(0)
+  testsTotal  Int              @default(0)
+  judgeTokens String[]         @default([])
+  executionMs Int?
+  memoryKb    Int?
+  submittedAt DateTime         @default(now())
+  completedAt DateTime?
+
+  battle Battle @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([battleId, submittedAt])
+  @@index([playerId])
+}
