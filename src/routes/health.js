@@ -13,7 +13,7 @@ router.get("/healthcheck", async (req, res) => {
       redis: redisResponse === "PONG" ? "connected" : "error",
     });
   } catch (e) {
-    res.send(503).json({
+    res.status(503).json({
       status: "error",
       message: e.message,
     });

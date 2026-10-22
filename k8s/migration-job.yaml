@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: database-migration-v1
+  namespace: codebattles
+
+spec:
+  backoffLimit: 3
+
+  template:
+    metadata:
+      labels:
+        app: database-migration
+
+    spec:
+      restartPolicy: Never
+
+      containers:
+        - name: database-migration
+          image: australia-southeast1-docker.pkg.dev/vocal-operand-505423-r1/codebattles/backend:v1
+          command:
+            - npm
+            - run
+            - db:deploy
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: codebattles-secrets
+                  key: DATABASE_URL
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

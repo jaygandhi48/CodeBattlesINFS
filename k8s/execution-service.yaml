@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: execution-service
+  namespace: codebattles
+spec:
+  selector:
+    app: execution-service
+  ports:
+    - name: http
+      port: 3001
+      targetPort: 3001
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: execution-service
+  namespace: codebattles
+spec:
+  replicas: 2
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
+  selector:
+    matchLabels:
+      app: execution-service
+
+  template:
+    metadata:
+      labels:
+        app: execution-service
+
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: execution-service
+
+      containers:
+        - name: execution-service
+          image: australia-southeast1-docker.pkg.dev/vocal-operand-505423-r1/codebattles/execution-service:v1
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 3001
+
+          env:
+            - name: NODE_ENV
+              value: production
+
+            - name: PORT
+              value: "3001"
+
+            - name: JUDGE0_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: codebattles-secrets
+                  key: JUDGE0_API_KEY
+
+            - name: JUDGE0_API_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: codebattles-secrets
+                  key: JUDGE0_API_HOST
+
+            - name: JUDGE0_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: codebattles-secrets
+                  key: JUDGE0_API_URL
+
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 3001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 3001
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

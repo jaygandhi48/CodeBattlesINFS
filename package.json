@@ -2,11 +2,10 @@
   "name": "code-battles-infs",
   "version": "0.1.0",
   "private": true,
-  "description": "Step-one Judge0 connectivity smoke test for Code Battles.",
+  "description": "Core API and realtime battle microservice for CodeBattles.",
   "type": "module",
   "scripts": {
-    "judge0:test": "node --env-file=.env src/judge0-smoke-test.js",
-    "check": "node --check src/judge0-smoke-test.js",
+    "check": "node --check src/server.js && node --check src/routes/battles.js && node --check src/lib/execution-service.js",
     "db:format": "prisma format",
     "db:validate": "prisma validate",
     "db:migrate": "prisma migrate dev",

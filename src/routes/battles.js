@@ -2,13 +2,7 @@ import crypto from "node:crypto";
 import express from "express";
 import { prisma } from "../lib/prisma.js";
 import { requirePlayer } from "../middlewares/auth.js";
-import {
-  createJudge0Submission,
-  getPythonID,
-  mapJudge0Status,
-  waitForJudge0Result,
-} from "../lib/judge0.js";
-import { version } from "node:os";
+import { executeSubmission } from "../lib/execution-service.js";
 const router = express.Router();
 
 router.post("/", requirePlayer, async (req, res) => {
@@ -372,45 +366,19 @@ router.post("/:roomCode/submissions", requirePlayer, async (req, res) => {
       submittedAt: judgingSubmission.submittedAt,
     });
 
-    const languageId = await getPythonID();
+    const executionResult = await executeSubmission({
+      sourceCode,
+      testCases: battle.problem.testCases,
+      timeLimitMs: battle.problem.timeLimitMs,
+    });
 
-    const judgeTokens = []; //judge0 returns a token that we will use
-    let testsPassed = 0;
-    let finalStatus = "ACCEPTED";
-    let totalExecutionMs = 0;
-    let maximumMemoryKb = 0;
-
-    for (const testCase of battle.problem.testCases) {
-      const judgeSubmission = await createJudge0Submission({
-        sourceCode,
-        languageId,
-        stdin: testCase.input,
-        expectedOutput: testCase.expectedOutput,
-        timeLimitMs: battle.problem.timeLimitMs,
-      }); //submit it and get a token the wait function will poll
-
-      if (!judgeSubmission.token) {
-        throw new Error("Judge0 did not return a submission token.");
-      }
-      judgeTokens.push(judgeSubmission.token);
-      const judgeResult = await waitForJudge0Result(judgeSubmission.token);
-      const testStatus = mapJudge0Status(judgeResult.status?.description);
-      const executionMs = Number.parseFloat(judgeResult.time ?? "0") * 1000;
-      const memoryKb = Number.parseInt(judgeResult.memory ?? "0", 10);
-      totalExecutionMs += Math.round(executionMs);
-      maximumMemoryKb = Math.max(
-        maximumMemoryKb,
-        Number.isNaN(memoryKb) ? 0 : memoryKb,
-      );
-
-      if (testStatus === "ACCEPTED") {
-        testsPassed += 1;
-      } else {
-        //update just once here
-        finalStatus = testStatus;
-        break;
-      }
-    }
+    const {
+      status: finalStatus,
+      testsPassed,
+      judgeTokens,
+      executionMs: totalExecutionMs,
+      memoryKb: maximumMemoryKb,
+    } = executionResult;
 
     const result = await prisma.$transaction(async (transaction) => {
       const submission = await transaction.submission.update({
@@ -514,7 +482,7 @@ router.post("/:roomCode/submissions", requirePlayer, async (req, res) => {
     console.error("Submission processing failed:", error);
 
     if (createdSubmission) {
-      await prisma.submission
+      const failedSubmission = await prisma.submission
         .update({
           where: {
             id: createdSubmission.id,
@@ -523,13 +491,40 @@ router.post("/:roomCode/submissions", requirePlayer, async (req, res) => {
             status: "INTERNAL_ERROR",
             completedAt: new Date(),
           },
+          select: {
+            id: true,
+            playerId: true,
+            status: true,
+            testsPassed: true,
+            testsTotal: true,
+            completedAt: true,
+          },
         })
         .catch((updateError) => {
           console.error(
             "Failed to mark submission as an internal error:",
             updateError,
           );
+
+          return null;
         });
+
+      if (failedSubmission) {
+        const roomCode = req.params.roomCode.trim().toUpperCase();
+        const io = req.app.get("io");
+
+        io.to(`battle:${roomCode}`).emit("submission:completed", {
+          submissionId: failedSubmission.id,
+          playerId: failedSubmission.playerId,
+          status: failedSubmission.status,
+          testsPassed: failedSubmission.testsPassed,
+          testsTotal: failedSubmission.testsTotal,
+          executionMs: null,
+          memoryKb: null,
+          completedAt: failedSubmission.completedAt,
+          won: false,
+        });
+      }
     }
 
     return res.status(500).json({
